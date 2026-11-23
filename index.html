@@ -1283,7 +1283,9 @@
         inset: 0;
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
+        object-position: center;
+        transform: none;
         display: block;
         opacity: 0;
         transition: opacity 0.25s ease;
@@ -9327,6 +9329,7 @@
             title: 'MBF Management System',
             video: '/assets/1123_d4639f4c.mp4',
             poster: '',
+            fit: 'contain',
             owner: 'AldoMahendra12',
             repo: 'management_mbf',
             live: 'https://management-mbf.vercel.app',
@@ -9338,6 +9341,7 @@
             title: 'Dakwah Tulungagung Website',
             video: '/assets/1123_1__80df2b16.mp4',
             poster: '',
+            fit: 'contain',
             owner: 'AldoMahendra12',
             repo: 'web_dt',
             live: 'https://webdt-three.vercel.app',
@@ -9349,6 +9353,7 @@
             title: 'Rumah Disain Studio Website',
             video: '/assets/rumah_disain_9fb46a4e.mp4',
             poster: '',
+            fit: 'contain',
             owner: 'AldoMahendra12',
             repo: 'rmh_dsn',
             live: '',
@@ -9360,11 +9365,12 @@
             title: 'Monograph Coffee Experience',
             video: '/assets/monograph_33a50ce1.mp4',
             poster: '',
+            fit: 'contain',
             owner: 'AldoMahendra12',
             repo: 'mono_graph',
             live: '',
             lang: 'TypeScript',
-            desc: 'Luxury-minimalist landing page for a coffee shop: kinetic typography, a capsule clipping-mask reveal and an adaptive light/dark interface, driven by GSAP ScrollTrigger and Lenis smooth scroll.',
+            desc: 'Luxury coffee shop landing page: kinetic type, a capsule mask reveal and an adaptive light/dark UI with GSAP and Lenis.',
             topics: ['nextjs', 'typescript', 'tailwindcss', 'gsap', 'lenis'],
           },
         ];
@@ -9710,6 +9716,11 @@
               return cleanCfg(cfg.poster);
             }
 
+            function getVideoFit(i) {
+              const cfg = PROJECTS[i] || {};
+              return cleanCfg(cfg.fit) === 'cover' ? 'cover' : 'contain';
+            }
+
             function isWorksNear() {
               if (!stageEl) return false;
               const rect = stageEl.getBoundingClientRect();
@@ -9731,6 +9742,13 @@
                 const poster = getPosterSrc(i);
                 if (poster && vid.getAttribute('poster') !== poster) {
                   vid.setAttribute('poster', poster);
+                }
+                const fit = getVideoFit(i);
+                if (vid.style.objectFit !== fit) {
+                  vid.style.objectFit = fit;
+                }
+                if (vid.style.objectPosition !== 'center') {
+                  vid.style.objectPosition = 'center';
                 }
                 const wantLoaded = worksNear && i === idx;
                 const src = getVideoSrc(i);
