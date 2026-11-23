@@ -1074,7 +1074,7 @@
         display: grid;
         grid-template-rows: auto minmax(0, 1fr) auto;
         gap: clamp(14px, 2.2svh, 24px);
-        padding: clamp(20px, 4svh, 44px) 0 clamp(16px, 3svh, 32px);
+        padding: 90px 0 clamp(16px, 3svh, 32px);
       }
 
       .kw:not(.kw-ready) .kw-stage {
@@ -1811,7 +1811,7 @@
         }
 
         .kw.kw-ready .kw-stage {
-          padding: 16px 0 16px;
+          padding: 90px 0 16px;
           gap: 12px;
         }
 
@@ -2913,9 +2913,9 @@
           --kn-ink: #f2f2f0;
           --kn-link: #bdbdbd;
           --kn-link-hover: #ffffff;
-          --kn-pill-bg: rgba(18, 18, 18, 0.92);
-          --kn-pill-border: rgba(255, 255, 255, 0.12);
-          --kn-pill-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+          --kn-pill-bg: rgba(28, 28, 28, 0.92);
+          --kn-pill-border: rgba(255, 255, 255, 0.14);
+          --kn-pill-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
           --kn-dot: #f2f2f0;
           --kn-cta-bg: #f2f2f0;
           --kn-cta-fg: #111111;
@@ -2923,7 +2923,7 @@
 
         @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
           .kn[data-tone='dark'] {
-            --kn-pill-bg: rgba(18, 18, 18, 0.66);
+            --kn-pill-bg: rgba(28, 28, 28, 0.72);
           }
         }
 
@@ -2937,7 +2937,8 @@
         .kn-pill {
           pointer-events: auto;
           position: relative;
-          width: min(920px, 92vw);
+          width: fit-content;
+          max-width: min(760px, 92vw);
           height: 64px;
           padding: 0 10px 0 14px;
           border-radius: 999px;
@@ -2967,9 +2968,9 @@
           display: flex;
           align-items: center;
           justify-content: space-between;
-          width: 100%;
+          width: auto;
           height: 100%;
-          gap: 8px;
+          gap: clamp(16px, 2.4vw, 34px);
         }
 
         .kn .brand {
@@ -3553,6 +3554,11 @@
             padding: 0 10px 0 14px;
           }
 
+          .kn-nav {
+            width: 100%;
+            gap: 8px;
+          }
+
           .kn.kn-ready.is-scrolled .kn-pill {
             height: 56px;
           }
@@ -3943,6 +3949,11 @@
               }
 
               function evaluateTone() {
+                const worksDark = kwEl
+                  ? kwEl.classList.contains('is-covered') &&
+                    !(kxEl && kxEl.classList.contains('kx-on'))
+                  : false;
+
                 const aboutDark = kjEl
                   ? kjEl.classList.contains('is-covered') &&
                     !kjEl.classList.contains('kj-out')
@@ -3964,7 +3975,7 @@
                     (fRect.top < H * 0.45 && maxScroll > 0 && sy >= maxScroll - 40);
                 }
 
-                const nextTone = aboutDark || footerDark ? 'dark' : 'light';
+                const nextTone = worksDark || aboutDark || footerDark ? 'dark' : 'light';
                 if (kn.getAttribute('data-tone') !== nextTone) {
                   kn.setAttribute('data-tone', nextTone);
                 }
@@ -8703,7 +8714,11 @@
               return x - Math.floor(x);
             }
 
-            const KX = { HOLD: 0.9 };
+            const KX = { HOLD: 0.9, STEP_MIN: 2.8, STEP_DIV: 115 };
+            let kxAdaptScale = 1;
+            let kxAdaptCount = 0;
+            let kxFrameSum = 0;
+            let kxFrameCount = 0;
             let H = Math.max(
               1,
               (probeEl && probeEl.offsetHeight) || window.innerHeight || 1
@@ -9044,79 +9059,69 @@
                 ctx.arc(cx, packetY, Math.max(2, u * 0.036), 0, Math.PI * 2);
                 ctx.fill();
               } else if (scene === 'neural') {
-                const colsData = [3, 4, 4, 2];
-                const colW = w / (colsData.length + 1);
-                const nodes = [];
-
-                colsData.forEach((count, ci) => {
-                  const colX = colW * (ci + 1);
-                  const rowH = h / (count + 1);
-                  for (let ri = 0; ri < count; ri++) {
-                    nodes.push({
-                      x: colX,
-                      y: rowH * (ri + 1),
-                      col: ci,
-                      id: nodes.length,
-                    });
-                  }
-                });
-
+                // Static neural topology (precomputed once, zero per-frame allocations)
                 ctx.lineWidth = Math.max(0.9, u * 0.012);
-                nodes.forEach((n1) => {
-                  nodes.forEach((n2) => {
-                    if (
-                      n2.col === n1.col + 1 &&
-                      Math.abs(n2.y - n1.y) < h * 0.38
-                    ) {
-                      ctx.strokeStyle = '#7c7c7c';
-                      ctx.beginPath();
-                      ctx.moveTo(n1.x, n1.y);
-                      ctx.lineTo(n2.x, n2.y);
-                      ctx.stroke();
+                ctx.strokeStyle = '#7c7c7c';
+                ctx.beginPath();
+                for (let e = 0; e < KX_NN_EDGE_COUNT; e++) {
+                  const n1 = KX_NN_SRC[e];
+                  const n2 = KX_NN_DST[e];
+                  const x1 = KX_NN_COL_X[KX_NN_COL[n1]] * w;
+                  const y1 = KX_NN_ROW_Y[n1] * h;
+                  const x2 = KX_NN_COL_X[KX_NN_COL[n2]] * w;
+                  const y2 = KX_NN_ROW_Y[n2] * h;
+                  if (Math.abs(y2 - y1) < h * 0.38) {
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                  }
+                }
+                ctx.stroke();
 
-                      const phase = hash(n1.id + 1, n2.id + 3);
-                      const prog = (sec * 0.55 + phase) % 1;
-                      const px = n1.x + (n2.x - n1.x) * prog;
-                      const py = n1.y + (n2.y - n1.y) * prog;
-                      ctx.fillStyle = '#0d0d0d';
-                      ctx.beginPath();
-                      ctx.arc(
-                        px,
-                        py,
-                        Math.max(1.5, u * 0.022),
-                        0,
-                        Math.PI * 2
-                      );
-                      ctx.fill();
-                    }
-                  });
-                });
+                const pulseRad = Math.max(1.5, u * 0.022);
+                ctx.fillStyle = '#0d0d0d';
+                ctx.beginPath();
+                for (let e = 0; e < KX_NN_EDGE_COUNT; e++) {
+                  const n1 = KX_NN_SRC[e];
+                  const n2 = KX_NN_DST[e];
+                  const x1 = KX_NN_COL_X[KX_NN_COL[n1]] * w;
+                  const y1 = KX_NN_ROW_Y[n1] * h;
+                  const x2 = KX_NN_COL_X[KX_NN_COL[n2]] * w;
+                  const y2 = KX_NN_ROW_Y[n2] * h;
+                  if (Math.abs(y2 - y1) < h * 0.38) {
+                    const prog = (sec * 0.55 + KX_NN_PHASE[e]) % 1;
+                    const px = x1 + (x2 - x1) * prog;
+                    const py = y1 + (y2 - y1) * prog;
+                    ctx.moveTo(px + pulseRad, py);
+                    ctx.arc(px, py, pulseRad, 0, Math.PI * 2);
+                  }
+                }
+                ctx.fill();
 
-                nodes.forEach((n) => {
-                  const act = 0.5 + 0.5 * Math.sin(sec * 2.4 + n.id * 0.9);
+                ctx.strokeStyle = '#111111';
+                ctx.lineWidth = Math.max(1, u * 0.012);
+                for (let ni = 0; ni < KX_NN_NODES; ni++) {
+                  const nx = KX_NN_COL_X[KX_NN_COL[ni]] * w;
+                  const ny = KX_NN_ROW_Y[ni] * h;
+                  const act = 0.5 + 0.5 * Math.sin(sec * 2.4 + ni * 0.9);
                   const nr = (0.034 + 0.022 * act) * u;
                   ctx.fillStyle = act > 0.65 ? '#111111' : '#777777';
-                  ctx.strokeStyle = '#111111';
-                  ctx.lineWidth = Math.max(1, u * 0.012);
                   ctx.beginPath();
-                  ctx.arc(n.x, n.y, nr, 0, Math.PI * 2);
+                  ctx.arc(nx, ny, nr, 0, Math.PI * 2);
                   ctx.fill();
                   ctx.stroke();
-                });
+                }
 
                 // 4-point star sparkles
-                const sparkPts = [
-                  [w * 0.24, h * 0.22, 0.3],
-                  [w * 0.78, h * 0.26, 1.7],
-                  [w * 0.68, h * 0.78, 2.9],
-                ];
-                sparkPts.forEach(([sx, sy, ph]) => {
+                ctx.fillStyle = '#0d0d0d';
+                for (let s = 0; s < 3; s++) {
+                  const sx = KX_SPARK_X[s] * w;
+                  const sy = KX_SPARK_Y[s] * h;
+                  const ph = KX_SPARK_PH[s];
                   const sp = 0.5 + 0.5 * Math.sin(sec * 2.8 + ph);
                   if (sp > 0.35) {
-                    ctx.fillStyle = '#0d0d0d';
                     drawStar4(ctx, sx, sy, u * 0.055 * sp);
                   }
-                });
+                }
               } else if (scene === 'responsive') {
                 const wave = 0.5 + 0.5 * Math.sin(a * 0.9);
                 const bw = (0.44 + 0.44 * wave) * w;
@@ -9141,8 +9146,8 @@
                 ctx.stroke();
 
                 const dotR = Math.max(1.2, u * 0.016);
-                [0.1, 0.2, 0.3].forEach((offset, di) => {
-                  ctx.fillStyle = '#111111';
+                ctx.fillStyle = '#111111';
+                for (let di = 0; di < 3; di++) {
                   ctx.beginPath();
                   ctx.arc(
                     bx + dotR * 3 + di * dotR * 3.2,
@@ -9152,7 +9157,7 @@
                     Math.PI * 2
                   );
                   ctx.fill();
-                });
+                }
 
                 const pad = Math.max(4, bw * 0.07);
                 const innerX = bx + pad;
@@ -9281,10 +9286,75 @@
               ctx.restore();
             }
 
+            const LEVELS = [0, 0.26, 0.52, 0.78, 1];
+            const KX_NN_COLS = [3, 4, 4, 2];
+            const KX_NN_NODES = 13;
+            const KX_NN_COL_X = new Float32Array(KX_NN_COLS.length);
+            const KX_NN_ROW_Y = new Float32Array(KX_NN_NODES);
+            const KX_NN_COL = new Uint8Array(KX_NN_NODES);
+            const KX_NN_SRC = new Uint8Array(64);
+            const KX_NN_DST = new Uint8Array(64);
+            const KX_NN_PHASE = new Float32Array(64);
+            let KX_NN_EDGE_COUNT = 0;
+            (function buildKxNeuralTables() {
+              let nid = 0;
+              for (let ci = 0; ci < KX_NN_COLS.length; ci++) {
+                KX_NN_COL_X[ci] = (ci + 1) / (KX_NN_COLS.length + 1);
+                const cnt = KX_NN_COLS[ci];
+                for (let ri = 0; ri < cnt; ri++) {
+                  KX_NN_ROW_Y[nid] = (ri + 1) / (cnt + 1);
+                  KX_NN_COL[nid] = ci;
+                  nid++;
+                }
+              }
+              for (let i = 0; i < KX_NN_NODES; i++) {
+                for (let j = 0; j < KX_NN_NODES; j++) {
+                  if (KX_NN_COL[j] === KX_NN_COL[i] + 1) {
+                    KX_NN_SRC[KX_NN_EDGE_COUNT] = i;
+                    KX_NN_DST[KX_NN_EDGE_COUNT] = j;
+                    KX_NN_PHASE[KX_NN_EDGE_COUNT] = hash(i + 1, j + 3);
+                    KX_NN_EDGE_COUNT++;
+                  }
+                }
+              }
+            })();
+            const KX_SPARK_X = [0.24, 0.78, 0.68];
+            const KX_SPARK_Y = [0.22, 0.26, 0.78];
+            const KX_SPARK_PH = [0.3, 1.7, 2.9];
+
             const fieldCanvas = document.createElement('canvas');
             const fieldCtx = fieldCanvas.getContext('2d', {
               willReadFrequently: true,
             });
+
+            function computeCardGrid(w, h, budgetCap) {
+              const narrow = (window.innerWidth || 1000) <= 760;
+              const oldStep = Math.max(4, w / 105);
+              const baseStep = narrow
+                ? Math.max(3.6, w / KX.STEP_DIV)
+                : Math.max(KX.STEP_MIN, w / KX.STEP_DIV);
+              let step = Math.min(oldStep, baseStep * kxAdaptScale);
+              let rowStep = step * 1.9;
+              let cols = Math.max(1, Math.ceil(w / step));
+              let rows = Math.max(1, Math.ceil(h / rowStep));
+              const maxDots = budgetCap > 0 ? Math.min(45000, budgetCap) : 45000;
+              while (cols * rows > maxDots) {
+                step *= 1.02;
+                rowStep = step * 1.9;
+                cols = Math.max(1, Math.ceil(w / step));
+                rows = Math.max(1, Math.ceil(h / rowStep));
+              }
+              return {
+                oldStep,
+                step,
+                rowStep,
+                stepScale: oldStep / step,
+                cols,
+                rows,
+                R: step * 0.46,
+                total: cols * rows,
+              };
+            }
 
             const renderers = cardEls.map((card, idx) => {
               const cv = card.querySelector('.kx-cv');
@@ -9301,6 +9371,21 @@
                 w: 0,
                 h: 0,
                 dpr: Math.min(2, window.devicePixelRatio || 1),
+                step: 2.8,
+                rowStep: 5.32,
+                oldStep: 4,
+                stepScale: 1,
+                cols: 0,
+                rows: 0,
+                R: 1.29,
+                total: 0,
+                fieldBuf: new Uint8Array(0),
+                seeds: new Float32Array(0),
+                edgeMask: new Float32Array(0),
+                lvlX: [null, new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
+                lvlY: [null, new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
+                lvlCounts: [0, 0, 0, 0, 0],
+                wasEmpty: false,
                 pointerX: -999,
                 pointerY: -999,
                 hoverTarget: 0,
@@ -9308,7 +9393,46 @@
                 ro: null,
                 onMove: null,
                 onLeave: null,
+                syncSize: null,
               };
+
+              function syncGrid(budgetCap) {
+                if (state.w <= 0 || state.h <= 0) return;
+                const g = computeCardGrid(state.w, state.h, budgetCap);
+                const gridChanged =
+                  state.cols !== g.cols ||
+                  state.rows !== g.rows ||
+                  Math.abs(state.step - g.step) > 0.001;
+                state.oldStep = g.oldStep;
+                state.step = g.step;
+                state.rowStep = g.rowStep;
+                state.stepScale = g.stepScale;
+                state.cols = g.cols;
+                state.rows = g.rows;
+                state.R = g.R;
+                if (state.total !== g.total) {
+                  state.total = g.total;
+                  state.fieldBuf = new Uint8Array(g.total);
+                  state.seeds = new Float32Array(g.total);
+                  state.edgeMask = new Float32Array(g.total);
+                  for (let k = 1; k < LEVELS.length; k++) {
+                    state.lvlX[k] = new Float32Array(g.total);
+                    state.lvlY[k] = new Float32Array(g.total);
+                  }
+                }
+                if (gridChanged) {
+                  for (let j = 0; j < g.rows; j++) {
+                    const ey = Math.abs(j / g.rows - 0.5) * 2;
+                    const rowOff = j * g.cols;
+                    for (let i = 0; i < g.cols; i++) {
+                      const k = rowOff + i;
+                      state.seeds[k] = 0.55 * hash(i, j) + 0.45 * hash(j * 3.1, 7.7);
+                      const ex = Math.abs(i / g.cols - 0.5) * 2;
+                      state.edgeMask[k] = 1 - smooth(0.82, 1, Math.max(ex, ey));
+                    }
+                  }
+                }
+              }
 
               function syncSize() {
                 const cw = Math.round(cv.clientWidth || 0);
@@ -9324,8 +9448,12 @@
                   cv.width = targetW;
                   cv.height = targetH;
                 }
+                syncGrid(45000);
+                state.wasEmpty = false;
               }
 
+              state.syncSize = syncSize;
+              state.syncGrid = syncGrid;
               syncSize();
 
               if (typeof ResizeObserver === 'function') {
@@ -9361,22 +9489,28 @@
               return state;
             });
 
-            const LEVELS = [0, 0.26, 0.52, 0.78, 1];
-
             function renderCards(sec, forceStatic) {
               if (!fieldCtx) return;
 
-              renderers.forEach((r) => {
-                if (!r) return;
+              const workStart = !forceStatic && kxOn ? performance.now() : 0;
+              let activeDotSum = 0;
+              let drewActiveCard = false;
+
+              for (let ri = 0; ri < renderers.length; ri++) {
+                const r = renderers[ri];
+                if (!r) continue;
                 const { cv, ctx, sceneType } = r;
                 const w = r.w || Math.round(cv.clientWidth || 0);
                 const h = r.h || Math.round(cv.clientHeight || 0);
-                if (w <= 0 || h <= 0) return;
+                if (w <= 0 || h <= 0) continue;
+                if (r.cols <= 0 || r.rows <= 0 || r.w !== w || r.h !== h) {
+                  r.syncSize();
+                }
 
                 const dpr = r.dpr;
                 const cw = Math.round(w * dpr);
                 const ch = Math.round(h * dpr);
-                if (cw <= 0 || ch <= 0) return;
+                if (cw <= 0 || ch <= 0) continue;
                 if (cv.width !== cw || cv.height !== ch) {
                   cv.width = cw;
                   cv.height = ch;
@@ -9396,19 +9530,32 @@
                 }
                 const d_i = forceStatic ? 0 : cs.d;
 
-                // Skip cards completely offscreen/unentered or before kx-on
-                if (!forceStatic && (!kxOn || m <= 0.002)) {
-                  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                  ctx.fillStyle = CFG.CARD_BG;
-                  ctx.fillRect(0, 0, w, h);
-                  return;
+                // Only draw active / dissolving cards; skip offscreen, hidden, buried, and pre-kx-on
+                if (!forceStatic && (!kxOn || m <= 0.002 || d_i >= 0.998)) {
+                  if (!r.wasEmpty) {
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    ctx.fillStyle = CFG.CARD_BG;
+                    ctx.fillRect(0, 0, w, h);
+                    r.wasEmpty = true;
+                  }
+                  continue;
                 }
 
-                const step = Math.max(4, w / 105);
-                const rowStep = step * 1.9;
-                const cols = clamp(Math.ceil(w / step), 1, 200);
-                const rows = clamp(Math.ceil(h / rowStep), 1, 200);
-                const R = step * 0.46;
+                // Keep sum of dots for drawing cards <= 60000
+                if (!forceStatic && activeDotSum + r.total > 60000) {
+                  const remaining = Math.max(4000, 60000 - activeDotSum);
+                  r.syncGrid(remaining);
+                }
+                activeDotSum += r.total;
+                drewActiveCard = true;
+                r.wasEmpty = false;
+
+                const step = r.step;
+                const rowStep = r.rowStep;
+                const stepScale = r.stepScale;
+                const cols = r.cols;
+                const rows = r.rows;
+                const R = r.R;
 
                 if (fieldCanvas.width !== cols || fieldCanvas.height !== rows) {
                   fieldCanvas.width = cols;
@@ -9418,56 +9565,57 @@
                 fieldCtx.setTransform(1, 0, 0, 1, 0, 0);
                 drawScene(fieldCtx, cols, rows, sec, sceneType);
                 const imgData = fieldCtx.getImageData(0, 0, cols, rows).data;
+                const fBuf = r.fieldBuf;
+                for (let k = 0; k < fBuf.length; k++) {
+                  fBuf[k] = imgData[k * 4];
+                }
 
                 r.hoverCur += (r.hoverTarget - r.hoverCur) * 0.18;
+                const useHover = r.hoverCur > 0.01;
                 const lensR = clamp(w * 0.22, 60, 110);
                 const cardDim = 1 - 0.6 * Math.min(d_i, 1);
 
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                ctx.clearRect(0, 0, w, h);
-                ctx.fillStyle = CFG.CARD_BG;
-                ctx.fillRect(0, 0, w, h);
-                ctx.fillStyle = CFG.DOT_COLOR;
-
                 const rowTick = forceStatic ? 0 : Math.floor(sec * 7);
+                const seeds = r.seeds;
+                const edgeMask = r.edgeMask;
+                const lvlCounts = r.lvlCounts;
+                const lvlX = r.lvlX;
+                const lvlY = r.lvlY;
+                lvlCounts[1] = 0;
+                lvlCounts[2] = 0;
+                lvlCounts[3] = 0;
+                lvlCounts[4] = 0;
 
-                ctx.beginPath();
                 for (let j = 0; j < rows; j++) {
                   const py = (j + 0.5) * rowStep;
-                  const ey = Math.abs(j / rows - 0.5) * 2;
+                  const rowOff = j * cols;
                   let shift = 0;
                   if (!forceStatic && hash(j, rowTick) > 0.965) {
-                    shift = Math.round((hash(rowTick, j) - 0.5) * 6);
+                    shift = Math.round((hash(rowTick, j) - 0.5) * 6 * stepScale);
                   }
 
                   for (let i = 0; i < cols; i++) {
                     const sampleI = clamp(i + shift, 0, cols - 1);
-                    let px = (sampleI + 0.5) * step;
-                    let dyPos = py;
-                    const ex = Math.abs(sampleI / cols - 0.5) * 2;
-
-                    const idxPx = (j * cols + sampleI) * 4;
-                    const rVal = imgData[idxPx] ?? 255;
-                    const lum = rVal / 255;
-
+                    const idxPx = rowOff + sampleI;
+                    const lum = fBuf[idxPx] * (1 / 255);
                     let v = clamp((1 - lum - 0.12) / 0.4, 0, 1);
-                    const seed =
-                      0.55 * hash(sampleI, j) + 0.45 * hash(j * 3.1, 7.7);
+                    if (v <= 0.005) continue;
 
+                    const seed = seeds[idxPx];
                     if (!forceStatic) {
                       v *= 0.88 + 0.12 * Math.sin(sec * 3.2 + seed * 40);
                     }
 
                     // Assemble/disassemble dissolve driven by card entrance m = e_i
                     const appearGate = smooth(seed * 0.45, 0.55 + seed * 0.45, m);
-                    v *= appearGate;
+                    v *= appearGate * edgeMask[idxPx] * cardDim;
+                    if (v <= 0.005) continue;
 
-                    // Soft edge vignette & buried card dimming
-                    const edgeMask = 1 - smooth(0.82, 1, Math.max(ex, ey));
-                    v *= edgeMask * cardDim;
+                    let px = (sampleI + 0.5) * step;
+                    let dyPos = py;
 
                     // Hover liquid lens distortion
-                    if (r.hoverCur > 0.01) {
+                    if (useHover) {
                       const dx = px - r.pointerX;
                       const dy = dyPos - r.pointerY;
                       const dist = Math.hypot(dx, dy);
@@ -9477,6 +9625,7 @@
                           falloff *
                           r.hoverCur *
                           step *
+                          stepScale *
                           (0.35 * 6 +
                             1.6 * Math.sin(dist * 0.16 - sec * 10));
                         px += (dx / dist) * push;
@@ -9493,13 +9642,71 @@
                     }
                     if (qLevel === 0) continue;
 
-                    const rad = R * (qLevel / 4);
-                    ctx.moveTo(px + rad, dyPos);
-                    ctx.arc(px, dyPos, rad, 0, Math.PI * 2);
+                    const c = lvlCounts[qLevel];
+                    lvlX[qLevel][c] = px;
+                    lvlY[qLevel][c] = dyPos;
+                    lvlCounts[qLevel] = c + 1;
                   }
                 }
-                ctx.fill();
-              });
+
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, w, h);
+                ctx.fillStyle = CFG.CARD_BG;
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = CFG.DOT_COLOR;
+
+                for (let lvl = 1; lvl < LEVELS.length; lvl++) {
+                  const count = lvlCounts[lvl];
+                  if (count === 0) continue;
+                  const xs = lvlX[lvl];
+                  const ys = lvlY[lvl];
+                  const rad = R * (lvl / 4);
+                  ctx.beginPath();
+                  for (let k = 0; k < count; k++) {
+                    const dx = xs[k];
+                    const dy = ys[k];
+                    ctx.moveTo(dx + rad, dy);
+                    ctx.arc(dx, dy, rad, 0, Math.PI * 2);
+                  }
+                  ctx.fill();
+                }
+              }
+
+              if (!forceStatic && kxOn && drewActiveCard) {
+                kxFrameSum += performance.now() - workStart;
+                kxFrameCount++;
+                if (kxFrameCount >= 90) {
+                  const avgMs = kxFrameSum / kxFrameCount;
+                  kxFrameSum = 0;
+                  kxFrameCount = 0;
+                  if (avgMs > 14 && kxAdaptCount < 2) {
+                    const anyBelowOld = renderers.some(
+                      (r) => r && r.step < r.oldStep - 0.01
+                    );
+                    if (anyBelowOld) {
+                      kxAdaptCount++;
+                      kxAdaptScale *= 1.12;
+                      KX.STEP_MIN = +(KX.STEP_MIN * 1.12).toFixed(4);
+                      let activeStep = 0;
+                      renderers.forEach((r) => {
+                        if (r && r.syncSize) {
+                          r.syncSize();
+                          if (r.idx === Math.round(curStack)) activeStep = r.step;
+                        }
+                      });
+                      console.info(
+                        '[kx] Adaptive fallback #' +
+                          kxAdaptCount +
+                          ': step=' +
+                          (activeStep || KX.STEP_MIN).toFixed(2) +
+                          'px (avg ' +
+                          avgMs.toFixed(1) +
+                          'ms)'
+                      );
+                    }
+                  }
+                }
+              }
             }
 
             function tickScroll() {
@@ -9683,7 +9890,7 @@
 
     <script>
       (function () {
-        const KJ = { HOLD: 0.9, STEP: 0.9, END: 0.8, OUT: 0.85, LOOP: 12, ORIGIN_EL: '.kx-deck' };
+        const KJ = { HOLD: 0.9, STEP: 0.9, END: 0.8, OUT: 0.85, LOOP: 12, ORIGIN_EL: '.kx-deck', STEP_DIV: 300, STEP_MIN: 3.4 };
         const ITEMS = [
           {
             label: 'Physics',
@@ -9812,6 +10019,12 @@
             let DPR = 1;
             let step = 4.5;
             let rowStep = 8.55;
+            let oldStep = 4.5;
+            let stepScale = 1;
+            let kjAdaptScale = 1;
+            let kjAdaptCount = 0;
+            let kjFrameSum = 0;
+            let kjFrameCount = 0;
             let cols = 0;
             let rows = 0;
             let R = 2.07;
@@ -9869,6 +10082,8 @@
             let bufB = new Uint8Array(0);
             let bufDust = new Uint8Array(0);
             let seeds = new Float32Array(0);
+            let edgeMask = new Float32Array(0);
+            let qzMask1 = new Float32Array(0);
             let Bld = new Float32Array(0);
             let Pop = new Uint8Array(0);
             let E = new Float32Array(0);
@@ -10067,10 +10282,22 @@
               cv.width = Math.max(1, Math.round(W * DPR));
               cv.height = Math.max(1, Math.round(H * DPR));
 
-              step = W <= 760 ? Math.max(4, W / 110) : Math.max(4.5, W / 210);
+              oldStep = W <= 760 ? Math.max(4, W / 110) : Math.max(4.5, W / 210);
+              const baseStep =
+                W <= 760
+                  ? Math.max(4, W / 110)
+                  : Math.max(KJ.STEP_MIN, (W / KJ.STEP_DIV) * kjAdaptScale);
+              step = Math.min(oldStep, baseStep);
               rowStep = step * 1.9;
               cols = Math.max(1, Math.ceil(W / step));
               rows = Math.max(1, Math.ceil(H / rowStep));
+              while (cols * rows > 90000) {
+                step *= 1.02;
+                rowStep = step * 1.9;
+                cols = Math.max(1, Math.ceil(W / step));
+                rows = Math.max(1, Math.ceil(H / rowStep));
+              }
+              stepScale = oldStep / step;
               R = step * 0.46;
 
               fA.width = cols;
@@ -10084,6 +10311,8 @@
                 bufB = new Uint8Array(total);
                 bufDust = new Uint8Array(total);
                 seeds = new Float32Array(total);
+                edgeMask = new Float32Array(total);
+                qzMask1 = new Float32Array(total);
                 Bld = new Float32Array(total);
                 Pop = new Uint8Array(total);
                 E = new Float32Array(total);
@@ -10095,11 +10324,25 @@
                 hasWake = false;
               }
 
+              const portraitM = H > W;
+              const qCx1 = portraitM ? 0.5 * W : 0.26 * W;
+              const qCy1 = portraitM ? 0.82 * H : 0.77 * H;
+              const qRx1 = portraitM ? 0.72 * W : 0.48 * W;
+              const qRy1 = portraitM ? 0.26 * H : 0.31 * H;
+
               for (let j = 0; j < rows; j++) {
                 const rowOff = j * cols;
+                const py = (j + 0.5) * rowStep;
+                const eyEdge = Math.abs((j + 0.5) / rows - 0.5) * 2;
                 for (let i = 0; i < cols; i++) {
-                  seeds[rowOff + i] =
+                  const k = rowOff + i;
+                  const px = (i + 0.5) * step;
+                  seeds[k] =
                     0.55 * hash(i, j) + 0.45 * hash(j * 3.1, 7.7);
+                  const exEdge = Math.abs((i + 0.5) / cols - 0.5) * 2;
+                  edgeMask[k] = 1 - smooth(0.9, 1, Math.max(exEdge, eyEdge));
+                  const qd1 = Math.hypot((px - qCx1) / qRx1, (py - qCy1) / qRy1);
+                  qzMask1[k] = smooth(0.7, 1.15, qd1);
                 }
               }
 
@@ -10637,9 +10880,9 @@
               const useLens = usePointer && (lensOn >= 0.01 || hasWake);
               const Rl = clamp(W * 0.1, 80, 160);
               const LENS = 0.4;
-              const RIPPLE = 1.8;
-              const TEAR = 14;
-              const SCATTER = 1.2;
+              const RIPPLE = 1.8 * stepScale;
+              const TEAR = 14 * stepScale;
+              const SCATTER = 1.2 * stepScale;
               const DROP = 0.35;
 
               const xScene = clamp(xVal, 0, 4);
@@ -10724,10 +10967,9 @@
               for (let j = 0; j < rows; j++) {
                 const py = (j + 0.5) * rowStep;
                 const rowOff = j * cols;
-                const eyEdge = Math.abs((j + 0.5) / rows - 0.5) * 2;
                 const rowShift =
                   hash(j, tick) > 0.975
-                    ? Math.round((hash(tick, j) - 0.5) * 8)
+                    ? Math.round((hash(tick, j) - 0.5) * 8 * stepScale)
                     : 0;
 
                 for (let i = 0; i < cols; i++) {
@@ -10827,12 +11069,15 @@
                   }
 
                   // Apply quiet-zone mask AFTER scatter offset so scatter cannot push dots behind text
-                  const qDist = Math.hypot((drawX - qCx) / qRx, (drawY - qCy) / qRy);
-                  v *= smooth(0.7, 1.15, qDist);
+                  if (e <= 0.004 && qb >= 0.9999) {
+                    v *= qzMask1[idx];
+                  } else {
+                    const qDist = Math.hypot((drawX - qCx) / qRx, (drawY - qCy) / qRy);
+                    v *= smooth(0.7, 1.15, qDist);
+                  }
                   if (v <= 0.005) continue;
 
-                  const exEdge = Math.abs((i + 0.5) / cols - 0.5) * 2;
-                  v *= 1 - smooth(0.9, 1, Math.max(exEdge, eyEdge));
+                  v *= edgeMask[idx];
                   if (v <= 0.005) continue;
 
                   const lvl = quantizeLevel(v);
@@ -10911,7 +11156,32 @@
               }
 
               const tSec = ((nowMs - t0Ms) / 1000) % KJ.LOOP;
+              const workStart = performance.now();
               renderCanvas(tSec, curX, curF, false, dtSec);
+              const workMs = performance.now() - workStart;
+
+              kjFrameSum += workMs;
+              kjFrameCount++;
+              if (kjFrameCount >= 90) {
+                const avgMs = kjFrameSum / kjFrameCount;
+                kjFrameSum = 0;
+                kjFrameCount = 0;
+                if (avgMs > 20 && kjAdaptCount < 2 && step < oldStep - 0.01) {
+                  kjAdaptCount++;
+                  kjAdaptScale *= 1.12;
+                  KJ.STEP_MIN = Math.min(oldStep, +(KJ.STEP_MIN * 1.12).toFixed(4));
+                  measure();
+                  console.info(
+                    '[kj] Adaptive fallback #' +
+                      kjAdaptCount +
+                      ': step=' +
+                      step.toFixed(2) +
+                      'px (avg ' +
+                      avgMs.toFixed(1) +
+                      'ms)'
+                  );
+                }
+              }
 
               canvasRafId = requestAnimationFrame(canvasFrame);
             }
