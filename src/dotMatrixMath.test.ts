@@ -28,11 +28,12 @@ function quantizeLevel(v: number): number {
 }
 
 function gridMetrics(W: number, H: number) {
-  const step = Math.max(3.2, W / 320);
+  const portrait = H > W;
+  const step = portrait ? clamp(W / 200, 1.9, 3.2) : Math.max(3.2, W / 320);
   const rowStep = step * 1.65;
   const cols = Math.ceil(W / step);
   const rows = Math.ceil(H / rowStep);
-  const R = step * 0.34;
+  const R = step * (portrait ? 0.43 : 0.34);
   return { step, rowStep, cols, rows, R };
 }
 
@@ -70,7 +71,7 @@ test('quantizeLevel maps intensities to the 7 fine halftone levels', () => {
   assert.equal(quantizeLevel(0.92), 1);
 });
 
-test('gridMetrics produces high-density non-overlapping dot geometry', () => {
+test('gridMetrics produces high-density non-overlapping dot geometry on desktop and mobile', () => {
   const desktop = gridMetrics(1440, 900);
   assert.equal(desktop.cols, 320);
   assert.ok(desktop.R / desktop.step >= 0.32 && desktop.R / desktop.step <= 0.38);
@@ -78,8 +79,22 @@ test('gridMetrics produces high-density non-overlapping dot geometry', () => {
   assert.ok(desktop.R * 2 < desktop.rowStep);
 
   const mobile = gridMetrics(390, 844);
-  assert.ok(mobile.step >= 3.2);
-  assert.ok(mobile.cols >= 120);
+  assert.ok(mobile.step >= 1.9 && mobile.step <= 3.2);
+  assert.ok(mobile.cols >= 195);
+  assert.ok(mobile.R * 2 < mobile.step);
+  assert.ok(mobile.R * 2 < mobile.rowStep);
+
+  const aspect = (0.4 * 1520) / (0.47 * 2688);
+  const hw = 390 * 0.56;
+  const hh = hw * aspect * 1.12;
+  assert.ok(hh / mobile.rowStep >= 34, `Expected >= 34 dot rows per hand on mobile, got ${hh / mobile.rowStep}`);
+
+  // Left and right fingertips never cross center x=0.5W at maximum reach+scale
+  const maxReach = (0.016 + 0.005) * 390;
+  const leftTipX = 1.03 * (-0.082 * 390 + maxReach + 0.926 * hw);
+  const rightTipX = 390 - 1.03 * (hw - 0.082 * 390 + maxReach - 0.035 * hw);
+  assert.ok(leftTipX < 390 * 0.48, `Left fingertip too close to center: ${leftTipX}`);
+  assert.ok(rightTipX > 390 * 0.502, `Right fingertip crossed center: ${rightTipX}`);
 });
 
 function distortionRadius(W: number): number {
